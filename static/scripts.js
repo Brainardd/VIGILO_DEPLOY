@@ -23,4 +23,8 @@ async function fetchMetrics() {
     setTimeout(fetchMetrics, 1000); // Refresh every second
 }
 
+function downloadLogs() {
+    window.location.href = "/download_logs";
+}
+
 fetchMetrics();

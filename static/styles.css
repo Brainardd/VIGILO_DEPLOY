@@ -85,3 +85,22 @@ h1 {
     margin-bottom: 8px;
     white-space: nowrap; /* Prevent wrapping of text */
 }
+
+.metrics button {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin-top: 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.metrics button:hover {
+    background-color: #0056b3;
+}
+
