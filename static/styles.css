@@ -47,11 +47,101 @@ h1 {
     margin-right: 20px;
     border: 3px solid #007bff;
     border-radius: 10px;
+    overflow: hidden; /* Prevent video from overflowing */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    width: 100%; /* Flexible width */
+    max-width: 640px; /* Limit the maximum width */
+    aspect-ratio: 16 / 9; /* Standard video aspect ratio */
+    background-color: #000; /* Fallback background color */
+    position: relative; /* Allow precise control of child elements */
 }
 
-.video-frame img {
+.video-frame video {
+    width: 100%; /* Ensure the video fills the frame */
+    height: 100%; /* Ensure it maintains its height proportionally */
+    object-fit: cover; /* Maintain aspect ratio and crop to fill */
+    border-radius: 10px; /* Match the frame’s rounded corners */
+    position: absolute; /* Align inside the parent frame */
+    top: 0; /* Align to top */
+    left: 0; /* Align to left */
+}
+
+/* Center the Live CSV Updates Section */
+.csv-live-updates-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 50vh;
+    padding: 20px;
+    background-color: #f4f4f9;
+}
+
+/* Live CSV Updates Section (Card Design) */
+.csv-live-updates {
+    padding: 20px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f5faff, #e1f0ff);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
     width: 100%;
+    max-width: 1000px;
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+/* Header for CSV Updates Section */
+.csv-live-updates h3 {
+    margin-top: 0;
+    font-size: 22px;
+    color: #0056b3;
+    font-weight: bold;
+    text-align: center;
+    padding: 10px 0;
+    border-bottom: 2px solid #ddd;
+    background: linear-gradient(135deg, #0056b3, #007bff);
+    color: white;
     border-radius: 8px;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15px;
+}
+
+/* Table Design for Live CSV Updates */
+.csv-live-updates table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: #333;
+    text-align: left;
+}
+
+.csv-live-updates th,
+.csv-live-updates td {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+.csv-live-updates th {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.csv-live-updates tr:nth-child(odd) {
+    background-color: #f7faff;
+}
+
+.csv-live-updates tr:hover {
+    background-color: #eef6ff;
+    transition: background-color 0.3s ease;
+}
+
+.csv-live-updates td {
+    white-space: nowrap; /* Prevent wrapping */
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .metrics {
@@ -59,8 +149,8 @@ h1 {
     text-align: left;
     font-size: 16px;
     color: #333;
-    width: 250px; /* Fixed width */
-    min-height: 300px; /* Minimum height to keep the size consistent */
+    width: 1000px; /* Fixed width */
+    min-height: 340px; /* Minimum height to keep the size consistent */
     padding: 10px;
     border: 1px solid #ccc; /* Optional border for better visualization */
     border-radius: 8px;
@@ -104,3 +194,65 @@ h1 {
     background-color: #0056b3;
 }
 
+/* General Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+/* Modal Content Box */
+.modal-content {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    width: 300px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal Buttons */
+.modal-content button {
+    margin: 5px;
+    padding: 10px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.modal-content button:hover {
+    background-color: #0056b3;
+}
+
+/* Timer Display */
+#timer-display {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* Close Timer Button */
+#close-timer-btn {
+    margin-top: 20px;
+    padding: 10px 15px;
+    background-color: #ff4d4d; /* Red color for close button */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#close-timer-btn:hover {
+    background-color: #e60000; /* Darker red on hover */
+}

@@ -16,16 +16,73 @@
     <main>
         <div class="content">
             <div class="video-frame">
-                <img src="{{ url_for('video_feed') }}" alt="Live Video Feed">
-            </div>
+                <video id="video" autoplay muted></video>
+                <img id="processed-frame" alt="Processed Frame">
+            </div>                     
             <div class="metrics">
                 <h2>Metrics</h2>
                 <ul id="metric-list">
                     <!-- Metrics dynamically update here -->
                 </ul>
-                <button onclick="downloadLogs()">Download Logs</button> <!-- Button to download logs -->
+                <button onclick="downloadLogs()">Download Logs</button>
+            </div>
+            
+        </div>
+        <div class="csv-live-updates-container">
+            <div class="csv-live-updates">
+                <h3>Live CSV Updates (Last 10 Entries)</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>EAR</th>
+                            <th>MOR</th>
+                            <th>Tilt Angle</th>
+                            <th>PERCLOS</th>
+                            <th>FOM</th>
+                            <th>Fatigue Detection</th>
+                            <th>Obstruction</th>
+                        </tr>
+                    </thead>
+                    <tbody id="csv-updates">
+                        <tr>
+                            <td colspan="9">Loading updates...</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
+        
+<!-- Fatigue Notification Modal -->
+<div id="fatigue-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h2>Take a Break!</h2>
+        <p>You seem fatigued. Take a break to recharge your energy.</p>
+        <div class="break-options">
+            <button class="start-break" data-duration="5">5 Minutes</button>
+            <button class="start-break" data-duration="10">10 Minutes</button>
+            <button class="start-break" data-duration="15">15 Minutes</button>
+        </div>
+        <button onclick="hideFatigueNotification()">Close</button>
+    </div>
+</div>
+
+<!-- Break Timer Modal -->
+<div id="break-timer-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h2>Break Timer</h2>
+        <p>Enjoy your break! We'll notify you when it's over.</p>
+        <p id="timer-display">0:00</p>
+        <p>Please relax and return once the timer ends.</p>
+        <button id="close-timer-btn">Close Timer</button> <!-- Close button -->
+    </div>
+</div>
+
+
+<!-- Audio Elements for Sounds -->
+<audio id="notification-sound" src="/static/audio/notification.mp3" preload="auto"></audio>
+<audio id="break-end-sound" src="/static/audio/break-end.mp3" preload="auto"></audio>
+           
     </main>
     <script src="{{ url_for('static', filename='scripts.js') }}"></script>
 </body>
