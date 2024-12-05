@@ -1,14 +1,23 @@
-from flask import Flask, render_template, Response, jsonify, send_file
+from flask import Flask, render_template, Response, jsonify, send_file, request, send_file, session
+import base64
 import cv2
 import mediapipe as mp
 import csv
 import os
 import time
+import numpy as np
 from Fatigue import process_frame, draw_metrics_on_frame, is_mouth_covered, calculate_mor
 from collections import deque
+import uuid
 
 app = Flask(__name__)
+app.secret_key = "1234"  # Required for session management
 
+# Directory to store user-specific CSV files
+CSV_DIR = "user_logs"
+if not os.path.exists(CSV_DIR):
+    os.makedirs(CSV_DIR)
+    
 # Initialize camera and variables
 camera = cv2.VideoCapture(1)
 closed_frames = deque(maxlen=10)
@@ -130,9 +139,22 @@ def gen_frames():
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-
+@app.before_request
+def assign_session_id():
+    """
+    Assign a unique session ID to each user if not already assigned.
+    """
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid.uuid4())  # Generate a unique session ID
+        session_csv_path = os.path.join(CSV_DIR, f"{session['session_id']}.csv")
+        # Create a CSV file for this session
+        with open(session_csv_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Timestamp", "EAR", "MOR", "Tilt Angle", "PERCLOS", "FOM", "Fatigue"])
+            
 @app.route('/')
 def index():
+    print(f"Current session ID: {session.get('session_id')}")
     return render_template('index.html')
 
 @app.route('/video_feed')
@@ -143,16 +165,50 @@ def video_feed():
 def metrics():
     global last_frame_metrics
     return jsonify({"metrics": last_frame_metrics})
+    
+@app.route('/process_frame', methods=['POST'])
+def process_frame_endpoint():
+    """
+    Endpoint to process frames and log metrics for the user's session.
+    """
+    data = request.get_json()
+    frame_data = data['frame']
 
-@app.route('/download_logs')
+    # Decode base64 frame
+    frame_bytes = base64.b64decode(frame_data.split(',')[1])
+    np_arr = np.frombuffer(frame_bytes, np.uint8)
+    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    # Process the frame using Fatigue.py
+    fatigue_status, metrics, _ = process_frame(frame, closed_frames, mouth_open_counts, yawn_state)
+
+    # Log metrics to the user's CSV file
+    session_csv_path = os.path.join(CSV_DIR, f"{session['session_id']}.csv")
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    with open(session_csv_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            timestamp,
+            metrics.get("EAR", "N/A"),
+            metrics.get("MOR", "N/A"),
+            metrics.get("Tilt Angle", "N/A"),
+            metrics.get("PERCLOS", "N/A"),
+            metrics.get("FOM", "N/A"),
+            metrics.get("Fatigue", "N/A")
+        ])
+
+    return jsonify({"metrics": metrics})
+
+@app.route('/download_logs', methods=['GET'])
 def download_logs():
     """
-    Allow the user to download the current log file.
+    Allow the user to download their unique CSV file.
     """
-    try:
-        return send_file(log_file_path, as_attachment=True)
-    except Exception as e:
-        return jsonify({"error": f"Error downloading file: {e}"}), 500
+    session_csv_path = os.path.join(CSV_DIR, f"{session['session_id']}.csv")
+    if os.path.exists(session_csv_path):
+        return send_file(session_csv_path, as_attachment=True)
+    else:
+        return jsonify({"error": "No log file available for this session."}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
