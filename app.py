@@ -30,6 +30,7 @@ mouth_open_counts = deque(maxlen=10)
 yawn_state = {"in_progress": False, "start_time": 0, "detected": 0}
 last_frame_metrics = {"EAR": "N/A", "MOR": "N/A", "Tilt Angle": "N/A", "Fatigue": "No"}
 last_valid_mor = None  # To handle hand-over-mouth scenarios
+last_csv_write_time = 0
 
 # Write CSV header if the log file doesn't exist
 log_file_path = "metrics_log.csv"
@@ -96,7 +97,7 @@ def get_csv_updates():
 
 @app.route('/process_frame', methods=['POST'])
 def process_frame_endpoint():
-    global last_frame_metrics, last_valid_mor
+    global last_frame_metrics, last_valid_mor, last_csv_write_time  # Include last_csv_write_time
 
     data = request.get_json()
     frame_data = data['frame']
@@ -152,24 +153,28 @@ def process_frame_endpoint():
         # Overlay metrics on the frame
         processed_frame = draw_metrics_on_frame(frame, metrics, fatigue_status, landmarks)
 
-        # Save metrics to CSV
+        # Save metrics to CSV if at least 1 second has passed since the last write
         session_csv_path = os.path.join(CSV_DIR, f"{session['session_id']}.csv")
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        with open(session_csv_path, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([
-                timestamp,
-                metrics.get("EAR", "N/A"),
-                metrics.get("MOR", "N/A"),
-                metrics.get("Tilt Angle", "N/A"),
-                metrics.get("PERCLOS", "N/A"),
-                metrics.get("FOM", "N/A"),
-                metrics.get("Fatigue", "N/A"),
-                metrics.get("Hand Covering Mouth", "N/A")
-            ])
-            
+        current_time = time.time()
+
+        if current_time - last_csv_write_time >= 1:  # Only write if at least 1 second has passed
+            with open(session_csv_path, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([
+                    timestamp,
+                    metrics.get("EAR", "N/A"),
+                    metrics.get("MOR", "N/A"),
+                    metrics.get("Tilt Angle", "N/A"),
+                    metrics.get("PERCLOS", "N/A"),
+                    metrics.get("FOM", "N/A"),
+                    metrics.get("Fatigue", "N/A"),
+                    metrics.get("Hand Covering Mouth", "N/A")
+                ])
+                last_csv_write_time = current_time  # Update the last write time
+
             # Debug to ensure correct filename
-        print(f"CSV filename sent to frontend: {session_csv_path}")
+            print(f"CSV filename sent to frontend: {session_csv_path}")
 
         # Encode the processed frame to Base64
         _, buffer = cv2.imencode('.jpg', processed_frame)
@@ -184,6 +189,7 @@ def process_frame_endpoint():
     except Exception as e:
         print(f"Error processing frame: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 
     
