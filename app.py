@@ -6,9 +6,10 @@ import os
 import time
 import numpy as np
 import mediapipe as mp
-from Fatigue import process_frame, draw_metrics_on_frame, is_mouth_covered, calculate_mor
+from Fatigue import process_frame, draw_metrics_on_frame, is_mouth_covered, calculate_mor, predict_live_audio
 from collections import deque
 import uuid
+import sounddevice as sd
 
 app = Flask(__name__)
 app.secret_key = "1234"  # Required for session management
@@ -27,8 +28,8 @@ if not os.path.exists(CSV_DIR):
 # Initialize state variables
 closed_frames = deque(maxlen=10)
 mouth_open_counts = deque(maxlen=10)
-yawn_state = {"in_progress": False, "start_time": 0, "detected": 0}
-last_frame_metrics = {"EAR": "N/A", "MOR": "N/A", "Tilt Angle": "N/A", "Fatigue": "No"}
+yawn_state = {"state": "Not Yawning", "confidence": 0.0}
+last_frame_metrics = {"EAR": "N/A", "MOR": "N/A", "Tilt Angle": "N/A", "Fatigue": "No", "Audio Fatigue": "No"}
 last_valid_mor = None  # To handle hand-over-mouth scenarios
 last_csv_write_time = 0
 
@@ -37,7 +38,7 @@ log_file_path = "metrics_log.csv"
 if not os.path.exists(log_file_path):
     with open(log_file_path, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["Timestamp", "EAR", "MOR", "Tilt Angle", "PERCLOS", "FOM", "Fatigue", "Obstructed"])
+        writer.writerow(["Timestamp", "EAR", "MOR", "Tilt Angle", "PERCLOS", "FOM", "Fatigue", "Yawning", "Yawning Confidence"])
 
 @app.before_request
 def assign_session_id():
@@ -50,7 +51,7 @@ def assign_session_id():
         # Create a CSV file for this session
         with open(session_csv_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(["Timestamp", "EAR", "MOR", "Tilt Angle", "PERCLOS", "FOM", "Fatigue", "Hand Covering Mouth"])
+            writer.writerow(["Timestamp", "EAR", "MOR", "Tilt Angle", "PERCLOS", "FOM", "Fatigue", "Audio Fatigue", "Yawning Confidence", "Yawning"])
         print(f"New session ID: {session['session_id']}, CSV Path: {session_csv_path}")
 
 @app.route('/')
@@ -95,101 +96,107 @@ def get_csv_updates():
     else:
         return jsonify({"error": "Session not initialized"}), 400
 
+@app.route('/process_audio', methods=['POST'])
+def process_audio_endpoint():
+    try:
+        # Get audio data from the frontend
+        data = request.get_json()
+        audio_base64 = data.get('audio', '')
+
+        # Decode Base64 to bytes
+        audio_bytes = base64.b64decode(audio_base64)
+        audio_array = np.frombuffer(audio_bytes, dtype=np.float32)
+
+        # Ensure sample rate compatibility
+        sr = 16000
+        
+        if len(audio_array) == 0:
+            raise ValueError("Audio data is empty or corrupted.")
+
+        audio_fatigue_status = predict_live_audio(audio_array, sr)
+
+        return jsonify({
+            "status": "success",
+            "audio_fatigue_status": audio_fatigue_status
+        })
+    except Exception as e:
+        print(f"Error processing audio: {e}")
+        return jsonify({"error": str(e), "status": "failure"}), 500
+
+    
 @app.route('/process_frame', methods=['POST'])
 def process_frame_endpoint():
-    global last_frame_metrics, last_valid_mor, last_csv_write_time  # Include last_csv_write_time
-
-    data = request.get_json()
-    frame_data = data['frame']
-
-    # Decode the base64-encoded frame
-    frame_bytes = base64.b64decode(frame_data.split(',')[1])
-    np_arr = np.frombuffer(frame_bytes, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    global last_frame_metrics, last_csv_write_time, last_valid_mor
 
     try:
-        # Process the frame for fatigue detection
-        fatigue_status, metrics, landmarks = process_frame(frame, closed_frames, mouth_open_counts, yawn_state)
+        # Decode incoming frame
+        data = request.get_json()
+        frame_data = data.get('frame', '')
+        frame_bytes = base64.b64decode(frame_data.split(',')[1])
+        np_arr = np.frombuffer(frame_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        # Hand detection with Mediapipe
-        results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        hand_covering_mouth = False
+        # Fatigue detection
+        fatigue_status, metrics, landmarks = process_frame(
+            frame, closed_frames, mouth_open_counts, yawn_state
+        )
 
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                if not hand_landmarks or not hand_landmarks.landmark:
-                    continue
-                # Check if the hand is covering the mouth
-                hand_covering_mouth = is_mouth_covered(landmarks, results.multi_hand_landmarks, frame.shape)
-
-        # Determine the MOR (Mouth Opening Ratio)
-        if hand_covering_mouth:
-            mor = last_valid_mor if last_valid_mor is not None else 0.0
-        else:
-            if landmarks:
+        # MOR logic (only landmarks, no hand detection)
+        try:
+            if landmarks and len(landmarks) >= 68:
                 mor = calculate_mor(landmarks)
-                last_valid_mor = mor
+                last_valid_mor = mor  # Update valid MOR
             else:
                 mor = 0.0
+                print("No valid landmarks detected. Setting MOR to 0.0")
+        except Exception as mor_error:
+            print(f"Error calculating MOR: {mor_error}")
+            mor = last_valid_mor if last_valid_mor is not None else 0.0
 
-        # Update fatigue metrics
-        if mor > 0.5:
-            fatigue_status = "Fatigue Detected While Yawning" if fatigue_status == "Fatigue Detected" else "Yawning Detected"
-        elif fatigue_status == "Fatigue Detected":
-            fatigue_status = "Fatigue Detected"
-        else:
-            fatigue_status = "No Fatigue"
+        metrics["MOR"] = round(mor, 2)
 
-        metrics["MOR"] = mor
-        metrics["Fatigue"] = fatigue_status
-        metrics["Hand Covering Mouth"] = "Yes" if hand_covering_mouth else "No"
-        last_frame_metrics = metrics
+        # Serialize metrics for JSON response
+        serializable_metrics = {
+            key: float(value) if isinstance(value, (np.float32, np.float64)) else value
+            for key, value in metrics.items()
+        }
 
-        # Round all metrics to 2 decimal places
-        for key, value in metrics.items():
-            if isinstance(value, float):
-                metrics[key] = round(value, 2)
-
-        # Overlay metrics on the frame
-        processed_frame = draw_metrics_on_frame(frame, metrics, fatigue_status, landmarks)
-
-        # Save metrics to CSV if at least 1 second has passed since the last write
+        
+        # CSV Logging
         session_csv_path = os.path.join(CSV_DIR, f"{session['session_id']}.csv")
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        current_time = time.time()
-
-        if current_time - last_csv_write_time >= 1:  # Only write if at least 1 second has passed
+        if time.time() - last_csv_write_time >= 1:
             with open(session_csv_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
+                
+                # Format numeric values to 2 decimal places
                 writer.writerow([
                     timestamp,
-                    metrics.get("EAR", "N/A"),
-                    metrics.get("MOR", "N/A"),
-                    metrics.get("Tilt Angle", "N/A"),
-                    metrics.get("PERCLOS", "N/A"),
-                    metrics.get("FOM", "N/A"),
-                    metrics.get("Fatigue", "N/A"),
-                    metrics.get("Hand Covering Mouth", "N/A")
+                    round(serializable_metrics.get("EAR", "N/A"), 2) if isinstance(serializable_metrics.get("EAR"), (int, float)) else "N/A",
+                    round(serializable_metrics["MOR"], 2) if isinstance(serializable_metrics["MOR"], (int, float)) else "N/A",
+                    round(serializable_metrics.get("Tilt Angle", "N/A"), 2) if isinstance(serializable_metrics.get("Tilt Angle"), (int, float)) else "N/A",
+                    round(serializable_metrics.get("PERCLOS", "N/A"), 2) if isinstance(serializable_metrics.get("PERCLOS"), (int, float)) else "N/A",
+                    round(serializable_metrics.get("FOM", "N/A"), 2) if isinstance(serializable_metrics.get("FOM"), (int, float)) else "N/A",
+                    serializable_metrics.get("Fatigue", "N/A"),
+                    round(serializable_metrics.get("Yawning Confidence", "N/A"), 2) if isinstance(serializable_metrics.get("Yawning Confidence"), (int, float)) else "N/A",
+                    serializable_metrics.get("Yawning", "N/A"),
                 ])
-                last_csv_write_time = current_time  # Update the last write time
+            last_csv_write_time = time.time()
 
-            # Debug to ensure correct filename
-            print(f"CSV filename sent to frontend: {session_csv_path}")
-
-        # Encode the processed frame to Base64
+        # Frame overlay
+        processed_frame = draw_metrics_on_frame(frame, serializable_metrics, fatigue_status, landmarks)
         _, buffer = cv2.imencode('.jpg', processed_frame)
         frame_b64 = base64.b64encode(buffer).decode('utf-8')
 
         return jsonify({
-            "metrics": metrics,
+            "metrics": serializable_metrics,
             "processed_frame": f"data:image/jpeg;base64,{frame_b64}",
-            "csv_filename": session_csv_path  # Send filename back to frontend
+            "csv_filename": session_csv_path
         })
-
+    
     except Exception as e:
         print(f"Error processing frame: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 
     
@@ -206,8 +213,27 @@ def download_logs():
             return jsonify({"error": "CSV file does not exist"}), 404
     else:
         return jsonify({"error": "Session not initialized"}), 400
+    
 
+@app.route('/current_metrics', methods=['GET'])
+def get_current_metrics():
+    """
+    A route to fetch the current metrics being processed.
+    """
+    global last_frame_metrics
 
+    try:
+        # Convert all float32 values to float for JSON serialization
+        converted_metrics = {
+            key: float(value) if isinstance(value, (np.float32, np.float64)) else value
+            for key, value in last_frame_metrics.items()
+        }
+
+        return jsonify({"current_metrics": converted_metrics})
+
+    except Exception as e:
+        print(f"Error fetching current metrics: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

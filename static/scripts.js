@@ -13,6 +13,38 @@ async function startCamera() {
     }
 }
 
+
+
+let audioContext, mediaRecorder, audioChunks = [];
+
+// Start capturing audio
+navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    audioContext = new AudioContext();
+    mediaRecorder = new MediaRecorder(stream);
+
+    const audioProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+    const source = audioContext.createMediaStreamSource(stream);
+
+    source.connect(audioProcessor);
+    audioProcessor.connect(audioContext.destination);
+
+    // Display audio levels
+    audioProcessor.onaudioprocess = (event) => {
+        const inputBuffer = event.inputBuffer.getChannelData(0);
+        const rms = Math.sqrt(inputBuffer.reduce((sum, val) => sum + val * val, 0) / inputBuffer.length);
+        console.log("Sample Rate:", audioContext.sampleRate);
+    };
+
+    // Capture audio chunks for backend processing
+    mediaRecorder.ondataavailable = event => {
+        audioChunks.push(event.data);   
+    };
+
+    mediaRecorder.start(1000); // Record audio in 1-second intervals
+}).catch(error => {
+    console.error("Error accessing microphone:", error);
+});
+
 async function processFrames() {
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -37,9 +69,8 @@ async function processFrames() {
         // Update metrics on the frontend
         updateMetrics(data.metrics);
 
-        // Display the processed frame
-        const processedFrame = document.getElementById('processed-frame');
-        processedFrame.src = data.processed_frame;
+        // Display processed fatigue notifications
+        checkForFatigue(data.metrics);
 
     } catch (error) {
         console.error('Error processing frame:', error);
@@ -47,6 +78,65 @@ async function processFrames() {
 
     requestAnimationFrame(processFrames);
 }
+
+let analyser;
+let audioData;
+let canvas;
+let canvasCtx;
+
+function startAudioVisualizer() {
+    // Set up the canvas
+    canvas = document.getElementById('audio-visualizer');
+    if (!canvas) {
+        console.error('Canvas element with id "audio-visualizer" not found.');
+        return;
+    }
+    canvasCtx = canvas.getContext('2d');
+
+    // Get microphone access
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        // Initialize AudioContext
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+
+        // Set up analyser node
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256; // Determines the frequency data resolution
+        audioData = new Uint8Array(analyser.frequencyBinCount);
+
+        // Connect the audio source to the analyser
+        source.connect(analyser);
+
+        // Start visualizing
+        visualizeAudio();
+    }).catch(error => {
+        console.error('Error accessing microphone:', error);
+    });
+}
+
+// Function to visualize microphone audio
+function visualizeAudio() {
+    // Schedule the next frame
+    requestAnimationFrame(visualizeAudio);
+
+    // Get frequency data from the analyser
+    analyser.getByteFrequencyData(audioData);
+
+    // Clear the canvas
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate the height of the visualizer bar
+    const barWidth = canvas.width; // Single slim bar
+    const heightMultiplier = canvas.height / 256; // Scale height to fit canvas
+    const barHeight = Math.max(...audioData) * heightMultiplier; // Use maximum frequency value for the bar height
+
+    // Draw the visualizer bar
+    canvasCtx.fillStyle = '#74c365'; // Bar color
+    canvasCtx.fillRect(0, canvas.height - barHeight, barWidth, barHeight);
+}
+
+// Start the audio visualizer
+startAudioVisualizer();
 
 const csvFileElement = document.getElementById('csv-filename');
 
@@ -78,7 +168,11 @@ function updateMetrics(metrics, csvFilename) {
 
     for (const [key, value] of Object.entries(metrics)) {
         const li = document.createElement('li');
-        li.textContent = `${key}: ${value}`;
+
+        // Format numeric values to two decimal places
+        const formattedValue = typeof value === 'number' ? value.toFixed(2) : value;
+        li.textContent = `${key}: ${formattedValue}`;
+
         metricList.appendChild(li);
     }
 
@@ -100,17 +194,24 @@ function downloadLogs() {
 // Fetch the filename on page load
 fetchCsvFilename();
 
-const csvUpdatesElement = document.getElementById('csv-updates');
 
-async function fetchCsvUpdates() {
+const csvUpdatesElement = document.getElementById('csv-updates');
+const csvContainer = document.querySelector('.csv-live-updates');
+let currentPage = 1; // Start with the first page
+let isFetching = false; // Prevent multiple simultaneous fetches
+let isUserScrolling = false; // Track if the user is actively scrolling
+let scrollTimeout; // Timeout to detect when scrolling stops
+
+async function fetchCsvUpdates(page) {
+    if (isFetching) return; // Avoid multiple fetch calls
+    isFetching = true;
+
     try {
-        const response = await fetch('/get_csv_updates');
+        const response = await fetch(`/get_csv_updates?page=${page}`); // Include pagination
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
         const data = await response.json();
-        if (data.lines) {
-            csvUpdatesElement.innerHTML = ''; // Clear the previous content
-
+        if (data.lines && data.lines.length > 0) {
             data.lines.forEach((line) => {
                 const columns = line.trim().split(','); // Split CSV row into columns
                 const row = document.createElement('tr');
@@ -124,20 +225,50 @@ async function fetchCsvUpdates() {
 
                 csvUpdatesElement.appendChild(row);
             });
+
+            // Only auto-scroll if the user is not scrolling and the scroll is already at the bottom
+            if (isAtBottom() && !isUserScrolling) {
+                scrollToBottom();
+            }
         } else {
-            csvUpdatesElement.innerHTML = '<tr><td colspan="9">No data available</td></tr>';
+            console.log('No more data available');
         }
     } catch (error) {
         console.error('Error fetching CSV updates:', error);
-        csvUpdatesElement.innerHTML = '<tr><td colspan="9">Error fetching updates</td></tr>';
+    } finally {
+        isFetching = false;
     }
 }
 
-// Poll for updates every 5 seconds
-setInterval(fetchCsvUpdates, 5000);
+// Function to scroll to the bottom of the container
+function scrollToBottom() {
+    csvContainer.scrollTop = csvContainer.scrollHeight;
+}
 
-// Fetch updates initially on page load
-fetchCsvUpdates();
+// Check if the scroll is at the very bottom
+function isAtBottom() {
+    return csvContainer.scrollTop + csvContainer.clientHeight >= csvContainer.scrollHeight - 10;
+}
+
+// Detect user scrolling
+csvContainer.addEventListener('scroll', () => {
+    isUserScrolling = true;
+
+    // Reset the scrolling status after 2 seconds of no user interaction
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        isUserScrolling = false;
+    }, 2000);
+});
+
+// Initial fetch and scroll to the bottom
+fetchCsvUpdates(currentPage).then(() => scrollToBottom());
+
+// Poll for updates every 5 seconds
+setInterval(() => {
+    fetchCsvUpdates(currentPage);
+}, 5000);
+
 
 // Modal Elements
 const fatigueModal = document.getElementById('fatigue-modal');
@@ -200,7 +331,7 @@ function startBreakTimer(duration) {
     hideFatigueNotification();
     showBreakTimerModal();
 
-    let remainingTime = duration * 60; // Convert minutes to seconds
+    let remainingTime = duration * 2; // Convert minutes to seconds
     updateTimerDisplay(remainingTime);
 
     // Clear any existing timer
@@ -255,4 +386,76 @@ function checkForFatigue(metrics) {
     }
 }
 
+// Select elements
+const helpButton = document.getElementById('helpButton');
+const manualPopup = document.getElementById('manualPopup');
+const closePopup = document.getElementById('closePopup');
+
+// Show popup
+helpButton.addEventListener('click', () => {
+    manualPopup.classList.remove('hidden');
+});
+
+// Hide popup
+closePopup.addEventListener('click', () => {
+    manualPopup.classList.add('hidden');
+});
+
+// Hide popup when clicking outside the content area
+manualPopup.addEventListener('click', (event) => {
+    if (event.target === manualPopup) {
+        manualPopup.classList.add('hidden');
+    }
+});
+
+// Show the download options modal
+function showDownloadOptions() {
+    const modal = document.getElementById('downloadOptionsModal');
+    modal.style.display = 'flex'; // Show modal as a flexbox for centering
+}
+
+// Close the download options modal
+function closeDownloadOptions() {
+    const modal = document.getElementById('downloadOptionsModal');
+    modal.style.display = 'none';
+}
+
+
+// Handle the download based on user choice
+function downloadLogs(format) {
+    if (format === 'pdf') {
+        fetch('/download_logs') // Fetch the entire CSV file from the server
+            .then((response) => {
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                return response.text();
+            })
+            .then((csvData) => {
+                convertCsvToPdf(csvData); // Convert CSV to PDF
+            })
+            .catch((error) => console.error('Error fetching CSV data:', error));
+    } else if (format === 'csv') {
+        window.location.href = "/download_logs"; // Trigger CSV download
+    }
+    closeDownloadOptions();
+}
+
+// Convert CSV data to PDF
+function convertCsvToPdf(csvData) {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF();
+
+    // Split CSV into rows and columns
+    const rows = csvData.split('\n').map((line) => line.split(','));
+
+    // Use autoTable plugin to add the CSV data to the PDF
+    pdf.autoTable({
+        head: [rows[0]], // First row as table headers
+        body: rows.slice(1), // Remaining rows as table data
+    });
+
+    // Save the PDF
+    pdf.save('logs.pdf');
+}
+
 startCamera();
+

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ViGILO</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="icon" href="../static/images/logo.png" type="image/png">
 </head>
 <body>
     <header>
@@ -15,18 +16,16 @@
     </header>
     <main>
         <div class="content">
+            <div class="visualizer-container">
+                <canvas id="audio-visualizer" width="800" height="300"></canvas>
+            </div>    
             <div class="video-frame">
-                <video id="video" autoplay muted></video>
+                <video id="video" autoplay></video>
                 <img id="processed-frame" alt="Processed Frame">
-            </div>                     
-            <div class="metrics">
-                <h2>Metrics</h2>
-                <ul id="metric-list">
-                    <!-- Metrics dynamically update here -->
-                </ul>
-                <button onclick="downloadLogs()">Download Logs</button>
+            </div>        
+            <div class="help-button-container">
+                <button id="helpButton" class="help-button">?</button>
             </div>
-            
         </div>
         <div class="csv-live-updates-container">
             <div class="csv-live-updates">
@@ -41,7 +40,8 @@
                             <th>PERCLOS</th>
                             <th>FOM</th>
                             <th>Fatigue Detection</th>
-                            <th>Obstruction</th>
+                            <th>Yawning Confidence</th>
+                            <th>Yawning</th>
                         </tr>
                     </thead>
                     <tbody id="csv-updates">
@@ -50,9 +50,94 @@
                         </tr>
                     </tbody>
                 </table>
+                
             </div>
         </div>
+        <button onclick="showDownloadOptions()">Download Logs</button>
+        <div class="metrics">
+            <h2>Metrics</h2>
+            <ul id="metric-list">
+                <!-- Metrics dynamically update here -->
+            </ul>
+        </div>
         
+
+<!-- Pop-up Manual -->
+<div id="manualPopup" class="popup hidden">
+    <div class="popup-content">
+        <span id="closePopup" class="close-button">&times;</span>
+        
+        <h2 class="manual-title">VIGILO User Manual</h2>
+        <p class="manual-description">
+            Welcome to VIGILO! Follow these steps and understand the key features of your fatigue detection companion for the best experience.
+        </p>
+        <br>
+        <br>
+        <div class="manual-section">
+            <div class="manual-line"></div>
+            <h3 class="section-title">Steps to Use the Application</h3>
+            <ol class="manual-steps">
+                <li>
+                    <p><strong>Allow Access:</strong> Grant microphone and camera permissions.</p>
+                    <img src="../static/images/camera_permission.png" alt="Allow Access Example" class="manual-image">
+                </li>
+                <li>
+                    <p><strong>Face and Audio Analysis:</strong> Keep your face well-lit and in the frame.</p>
+                    <img src="../static/images/face_analysis_image.png" alt="Face Analysis Example" class="manual-image">
+                </li>
+                <li>
+                    <p><strong>Fatigue Detection:</strong> The app analyzes your data in real time.</p>
+                    <img src="../static/images/Detection.png" alt="Fatigue Detection Example" class="manual-image">
+                </li>
+                <li>
+                    <p><strong>Rest Prompt:</strong> If fatigue is detected, the app will prompt you to take a break.</p>
+                    <img src="../static/images/Prompt1.png" alt="Rest Prompt Example" class="manual-image">
+                    <img src="../static/images/Prompt2.png" alt="Rest Prompt Example" class="manual-image">
+                </li>
+                <li>
+                    <p><strong>Download metrics:</strong> You can also download the metrics as CSV file or PDF file.</p>
+                    <img src="../static/images/DownloadFormat.png" alt="Rest Prompt Example" class="manual-image">
+                </li>
+            </ol>
+        </div>
+        <br>
+        <br>
+        <div class="manual-section">
+            <div class="manual-line"></div>
+            <h3 class="section-title">Key Metrics Explained</h3>
+            <p><strong>EAR (Eye Aspect Ratio):</strong> Tracks eye closure and blinking to detect fatigue.</p>
+            <p><strong>MOR (Mouth Opening Ratio):</strong> Detects yawning based on mouth width.</p>
+            <p><strong>Tilt Angle:</strong> Monitors head position to assess focus and fatigue.</p>
+            <p><strong>PERCLOS:</strong> Measures eye closure percentage to determine drowsiness.</p>
+            <p><strong>FOM (Frequency of Open Mouth):</strong> Counts instances of open mouth for fatigue indicators.</p>
+            <p><strong>Video Yawning Detection Model:</strong> A model that predicts your yawning via face recognition.</p>
+            <p><strong>Audio Yawning Detection Model:</strong> A model that predicts your yawning via voice recognition.</p>
+        </div>
+        <br>
+        <br>
+        <div class="manual-section">
+            <div class="manual-line"></div>
+            <h3 class="section-title">Tips for Best Results</h3>
+            <p>✓ Position the camera at eye level for accurate readings.</p>
+            <p>✓ Use the app in a well-lit environment.</p>
+            <p>✓ Minimize background noise for clearer audio detection.</p>
+        </div>
+        <br>
+        <br>
+        <div class="manual-section">
+            <div class="manual-line"></div>
+            <h3 class="section-title">Researchers</h3>
+            <p>Raniel John Vina</p>
+            <p>Anthony Palanog</p>
+            <p>John Brainard Dela Cruz</p>
+            <br>
+            <h3 class="section-title">Special Thanks to our Advisor</h3>
+            <p>Mrs. Jennylinde R Manaois</p>
+        </div>
+    </div>
+</div>
+
+
 <!-- Fatigue Notification Modal -->
 <div id="fatigue-modal" class="modal" style="display: none;">
     <div class="modal-content">
@@ -64,6 +149,15 @@
             <button class="start-break" data-duration="15">15 Minutes</button>
         </div>
         <button onclick="hideFatigueNotification()">Close</button>
+    </div>
+</div>
+<!-- Modal or Popup for format selection -->
+<div id="downloadOptionsModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h4>Select Download Format</h4>
+        <button onclick="downloadLogs('pdf')">Download as PDF</button>
+        <button onclick="downloadLogs('csv')">Download as CSV</button>
+        <button onclick="closeDownloadOptions()">Cancel</button>
     </div>
 </div>
 
@@ -78,6 +172,10 @@
     </div>
 </div>
 
+<footer style="background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 14px; border-top: 1px solid #e9ecef;">
+    <p>&copy; 2024 VIGILO - All Rights Reserved.</p>
+</footer>
+
 
 <!-- Audio Elements for Sounds -->
 <audio id="notification-sound" src="/static/audio/notification.mp3" preload="auto"></audio>
@@ -85,5 +183,7 @@
            
     </main>
     <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 </body>
 </html>

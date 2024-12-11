@@ -45,7 +45,7 @@ h1 {
 .video-frame {
     flex: 3;
     margin-right: 20px;
-    border: 3px solid #007bff;
+    border: 3px solid #d1d1d1;
     border-radius: 10px;
     overflow: hidden; /* Prevent video from overflowing */
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -66,6 +66,26 @@ h1 {
     left: 0; /* Align to left */
 }
 
+
+.visualizer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 50px; /* Slim width */
+    height: 400px; /* Tall height */
+    margin: 0 20px; /* Space between camera and metrics */
+    background: #222; /* Dark background for contrast */
+    border-radius: 10px; /* Rounded corners */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); /* Subtle shadow */
+}
+
+canvas#audio-visualizer {
+    width: 100%; /* Full width of the container */
+    height: 100%; /* Full height of the container */
+    background-color: transparent; /* Transparent background for cleaner look */
+}
+
 /* Center the Live CSV Updates Section */
 .csv-live-updates-container {
     display: flex;
@@ -73,7 +93,7 @@ h1 {
     align-items: center;
     min-height: 50vh;
     padding: 20px;
-    background-color: #f4f4f9;
+    background-color: #e0e0e0;
 }
 
 /* Live CSV Updates Section (Card Design) */
@@ -85,7 +105,7 @@ h1 {
     width: 100%;
     max-width: 1000px;
     overflow-y: auto;
-    max-height: 400px;
+    max-height: 600px;
 }
 
 /* Header for CSV Updates Section */
@@ -134,9 +154,11 @@ h1 {
 }
 
 .csv-live-updates tr:hover {
-    background-color: #eef6ff;
+    background-color: #3184e2;
     transition: background-color 0.3s ease;
+    
 }
+
 
 .csv-live-updates td {
     white-space: nowrap; /* Prevent wrapping */
@@ -145,16 +167,8 @@ h1 {
 }
 
 .metrics {
-    flex: 1;
-    text-align: left;
-    font-size: 16px;
-    color: #333;
-    width: 1000px; /* Fixed width */
-    min-height: 340px; /* Minimum height to keep the size consistent */
-    padding: 10px;
-    border: 1px solid #ccc; /* Optional border for better visualization */
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    font-size: 0%;
+    opacity: 0%;
 }
 
 .metrics h2 {
@@ -176,7 +190,7 @@ h1 {
     white-space: nowrap; /* Prevent wrapping of text */
 }
 
-.metrics button {
+button {
     display: block;
     width: 100%;
     padding: 10px;
@@ -190,7 +204,7 @@ h1 {
     transition: background-color 0.3s ease;
 }
 
-.metrics button:hover {
+button:hover {
     background-color: #0056b3;
 }
 
@@ -255,4 +269,137 @@ h1 {
 
 #close-timer-btn:hover {
     background-color: #e60000; /* Darker red on hover */
+}
+
+/* Help Button Styling */
+.help-button-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+}
+.help-button {
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* General Popup Styling */
+.popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6); /* Subtle dark overlay */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    overflow: auto;
+    font-family: "Arial", sans-serif;
+}
+
+/* Content Container */
+.popup-content {
+    background-color: #fff;
+    border-radius: 12px;
+    padding: 30px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+    overflow-y: auto;
+    max-height: 90%;
+    position: relative;
+    font-size: 16px;
+    line-height: 1.8;
+}
+
+/* Close Button */
+.close-button {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+.close-button:hover {
+    color: #007BFF;
+}
+
+/* Title and Description */
+.manual-title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+    text-align: center;
+}
+.manual-description {
+    margin-bottom: 20px;
+    color: #555;
+    text-align: center;
+}
+
+/* Section Titles */
+.section-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-top: 20px;
+    color: #007BFF;
+}
+
+/* Divider Line */
+.manual-line {
+    height: 2px;
+    background-color: #E0E0E0;
+    margin: 10px 0;
+    width: 100%;
+}
+
+/* Steps and Tips */
+.manual-steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.manual-steps li {
+    margin-bottom: 20px;
+}
+.manual-tips {
+    margin: 0;
+    padding: 0;
+}
+.manual-tips p {
+    margin-bottom: 10px;
+}
+
+/* Images */
+.manual-image {
+    display: block;
+    margin: 10px auto;
+    max-width: 100%;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Icons for tips */
+.manual-tips p::before {
+    content: "✓";
+    color: #007BFF;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+
+.hidden {
+    display: none;
 }
