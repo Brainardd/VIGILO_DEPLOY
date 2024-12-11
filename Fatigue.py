@@ -29,8 +29,8 @@ EAR_THRESHOLD = 0.23
 MOR_THRESHOLD = 0.55
 MOR_THRESHOLD_MODEL = 10
 TILT_THRESHOLD = 10
-PERCLOS_THRESHOLD = 70  # Percentage threshold for closed eyes
-FOM_THRESHOLD = 5       # Number of mouth openings in a time window (e.g., 1 minute)
+PERCLOS_THRESHOLD = 70
+FOM_THRESHOLD = 5
 YAWN_CONFIDENCE_THRESHOLD = 0.08
 
 # Initialize tracking variables
